@@ -2,19 +2,52 @@
 
 ## 介绍
 
-此 SDK 用于开发 Higress 的 Wasm 插件
+此 SDK 用于使用 Go 语言开发 Higress 的 Wasm 插件。
 
-## 编译环境要求
+## 使用 Higress wasm-go builder 快速构建
 
-(需要支持 go 范型特性)
+使用以下命令可以快速构建 wasm-go 插件:
 
-Go 版本: >= 1.18
+```bash
+$ PLUGIN_NAME=request-block make build
+```
 
-TinyGo 版本: >= 0.25.0
+<details>
+<summary>输出结果</summary>
+<pre><code>
+DOCKER_BUILDKIT=1 docker build --build-arg PLUGIN_NAME=request-block \
+                               -t request-block:20230223-173305-3b1a471 \
+                               --output extensions/request-block .
+[+] Building 67.7s (12/12) FINISHED
 
-## Quick Examples
+image:            request-block:20230223-173305-3b1a471
+output wasm file: extensions/request-block/plugin.wasm
+</code></pre>
+</details>
 
-使用 [request-block](extensions/request-block) 作为例子
+该命令最终构建出一个 wasm 文件和一个 Docker image。
+这个本地的 wasm 文件被输出到了指定的插件的目录下，可以直接用于调试。
+你也可以直接使用 `make build-push` 一并构建和推送 image.
+
+### 参数说明
+
+| 参数名称          | 可选/必须 | 默认值                                       | 含义                                                                   |
+|---------------|-------|-------------------------------------------|----------------------------------------------------------------------|
+| `PLUGIN_NAME` | 可选的   | hello-world                               | 要构建的插件名称。                                                            |
+| `REGISTRY`    | 可选的   | 空                                         | 生成的镜像的仓库地址，如 `example.registry.io/my-name/`.  注意 REGISTRY 值应当以 / 结尾。 |
+| `IMG`         | 可选的   | 如不设置则根据仓库地址、插件名称、构建时间以及 git commit id 生成。 | 生成的镜像名称。如非空，则会覆盖`REGISTRY` 参数。                                       |
+
+## 本地构建
+
+你也可以选择先在本地将 wasm 构建出来，再拷贝到 Docker 镜像中。这要求你要先在本地搭建构建环境。
+
+编译环境要求如下：
+
+- Go 版本: >= 1.18 (需要支持范型特性)
+
+- TinyGo 版本: >= 0.25.0
+
+下面是本地多步骤构建 [request-block](extensions/request-block) 的例子。
 
 ### step1. 编译 wasm
 
@@ -24,14 +57,21 @@ tinygo build -o main.wasm -scheduler=none -target=wasi ./extensions/request-bloc
 
 ### step2. 构建并推送插件的 docker 镜像
 
-使用这份简单的 [dockerfile](./Dockerfile).
+使用这份简单的 Dockerfile
+
+```Dockerfile
+FROM scratch
+COPY main.wasm plugin.wasm
+```
 
 ```bash
-docker build -t <your_registry_hub>/request-block:1.0.0 .
+docker build -t <your_registry_hub>/request-block:1.0.0 -f <your_dockerfile> .
 docker push <your_registry_hub>/request-block:1.0.0
 ```
 
-### step3. 创建 WasmPlugin 资源
+## 创建 WasmPlugin 资源使插件生效
+
+编写 WasmPlugin 资源如下：
 
 ```yaml
 apiVersion: extensions.higress.io/v1alpha1
@@ -40,16 +80,14 @@ metadata:
   name: request-block
   namespace: higress-system
 spec:
-  selector:
-    matchLabels:
-      higress: higress-system-higress-gateway
   defaultConfig:
     block_urls:
     - "swagger.html"
-  url: oci://<your_registry_hub>/request-block:1.0.0
+  url: oci://<your_registry_hub>/request-block:1.0.0  # 之前构建和推送的 image 地址
 ```
 
-创建上述资源后，如果请求url携带 `swagger.html`, 则这个请求就会被拒绝，例如：
+使用 `kubectl apply -f <your-wasm-plugin-yaml>` 使资源生效。
+资源生效后，如果请求url携带 `swagger.html`, 则这个请求就会被拒绝，例如：
 
 ```bash
 curl <your_gateway_address>/api/user/swagger.html
@@ -66,7 +104,6 @@ content-length: 0
 
 可以阅读此 [文档](https://istio.io/latest/docs/reference/config/proxy_extensions/wasm-plugin/) 了解更多关于 wasmplugin 的配置
 
-
 ## 路由级或域名级生效
 
 ```yaml
@@ -76,14 +113,11 @@ metadata:
   name: request-block
   namespace: higress-system
 spec:
-  selector:
-    matchLabels:
-      higress: higress-system-higress-gateway 
   defaultConfig:
    # 跟上面例子一样，这个配置会全局生效，但如果被下面规则匹配到，则会改为执行命中规则的配置
    block_urls:
    - "swagger.html"
-   matchRules:
+  matchRules:
    # 路由级生效配置
   - ingress:
     - default/foo
@@ -108,5 +142,4 @@ spec:
   url: oci://<your_registry_hub>/request-block:1.0.0
 ```
 
-所有规则会按上面配置的顺序一次执行匹配，当有一个规则匹配时，就停止匹配，并选择匹配的配置执行插件逻辑
-
+所有规则会按上面配置的顺序一次执行匹配，当有一个规则匹配时，就停止匹配，并选择匹配的配置执行插件逻辑。

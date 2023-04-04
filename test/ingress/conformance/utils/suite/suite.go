@@ -15,6 +15,7 @@
 package suite
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/alibaba/higress/test/ingress/conformance/utils/config"
@@ -87,13 +88,6 @@ type Options struct {
 	RoundTripper     roundtripper.RoundTripper
 	BaseManifests    string
 	NamespaceLabels  map[string]string
-	// ValidUniqueListenerPorts maps each listener port of each Gateway in the
-	// manifests to a valid, unique port. There must be as many
-	// ValidUniqueListenerPorts as there are listeners in the set of manifests.
-	// For example, given two Gateways, each with 2 listeners, there should be
-	// four ValidUniqueListenerPorts.
-	// If empty or nil, ports are not modified.
-	ValidUniqueListenerPorts []int
 
 	// CleanupBaseResources indicates whether or not the base test
 	// resources such as Gateways should be cleaned up after the run.
@@ -130,8 +124,7 @@ func New(s Options) *ConformanceTestSuite {
 		BaseManifests:    s.BaseManifests,
 		GatewayAddress:   s.GatewayAddress,
 		Applier: kubernetes.Applier{
-			NamespaceLabels:          s.NamespaceLabels,
-			ValidUniqueListenerPorts: s.ValidUniqueListenerPorts,
+			NamespaceLabels: s.NamespaceLabels,
 		},
 		SupportedFeatures: s.SupportedFeatures,
 		TimeoutConfig:     s.TimeoutConfig,
@@ -172,11 +165,22 @@ func (suite *ConformanceTestSuite) Setup(t *testing.T) {
 
 // Run runs the provided set of conformance tests.
 func (suite *ConformanceTestSuite) Run(t *testing.T, tests []ConformanceTest) {
+
+	t.Logf("Start Running %d Test Cases: \n\n%s", len(tests), globalConformanceTestsListInfo(tests))
 	for _, test := range tests {
 		t.Run(test.ShortName, func(t *testing.T) {
 			test.Run(t, suite)
 		})
 	}
+}
+
+func globalConformanceTestsListInfo(tests []ConformanceTest) string {
+	var cases string
+	for index, test := range tests {
+		cases += fmt.Sprintf("CaseNum: %d\nCaseName: %s\nScenario: %s\n\n", index+1, test.ShortName, test.Description)
+	}
+
+	return cases
 }
 
 // ConformanceTest is used to define each individual conformance test.

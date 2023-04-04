@@ -1,6 +1,3 @@
-//go:build conformance
-// +build conformance
-
 // Copyright (c) 2022 Alibaba Group Holding Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,16 +18,15 @@ import (
 	"flag"
 	"testing"
 
-	"github.com/alibaba/higress/test/ingress/conformance/tests"
-	"github.com/alibaba/higress/test/ingress/conformance/utils/flags"
-	"github.com/alibaba/higress/test/ingress/conformance/utils/suite"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/networking/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
-)
 
-var useUniquePorts = flag.Bool("use-unique-ports", true, "whether to use unique ports")
+	"github.com/alibaba/higress/test/ingress/conformance/tests"
+	"github.com/alibaba/higress/test/ingress/conformance/utils/flags"
+	"github.com/alibaba/higress/test/ingress/conformance/utils/suite"
+)
 
 func TestHigressConformanceTests(t *testing.T) {
 	flag.Parse()
@@ -43,27 +39,37 @@ func TestHigressConformanceTests(t *testing.T) {
 
 	require.NoError(t, v1.AddToScheme(client.Scheme()))
 
-	validUniqueListenerPorts := []int{
-		80,
-		443,
-	}
-
-	if !*useUniquePorts {
-		validUniqueListenerPorts = []int{}
-	}
-
 	cSuite := suite.New(suite.Options{
-		Client:                   client,
-		IngressClassName:         *flags.IngressClassName,
-		Debug:                    *flags.ShowDebug,
-		CleanupBaseResources:     *flags.CleanupBaseResources,
-		ValidUniqueListenerPorts: validUniqueListenerPorts,
-		SupportedFeatures:        map[suite.SupportedFeature]bool{},
-		GatewayAddress:           "localhost",
+		Client:               client,
+		IngressClassName:     *flags.IngressClassName,
+		Debug:                *flags.ShowDebug,
+		CleanupBaseResources: *flags.CleanupBaseResources,
+		SupportedFeatures:    map[suite.SupportedFeature]bool{},
+		GatewayAddress:       "localhost",
 	})
+
 	cSuite.Setup(t)
+
 	higressTests := []suite.ConformanceTest{
 		tests.HTTPRouteSimpleSameNamespace,
+		tests.HTTPRouteHostNameSameNamespace,
+		tests.HTTPRouteRewritePath,
+		tests.HTTPRouteRewriteHost,
+		tests.HTTPRouteCanaryHeader,
+		tests.HTTPRouteEnableCors,
+		tests.HTTPRouteIgnoreCaseMatch,
+		tests.HTTPRouteMatchMethods,
+		tests.HTTPRouteMatchQueryParams,
+		tests.HTTPRouteMatchHeaders,
+		tests.HTTPRouteAppRoot,
+		tests.HTTPRoutePermanentRedirect,
+		tests.HTTPRoutePermanentRedirectCode,
+		tests.HTTPRouteTemporalRedirect,
+		tests.HTTPRouteSameHostAndPath,
+		tests.HTTPRouteCanaryHeaderWithCustomizedHeader,
+		tests.HTTPRouteWhitelistSourceRange,
+		tests.HTTPRouteCanaryWeight,
 	}
+
 	cSuite.Run(t, higressTests)
 }
